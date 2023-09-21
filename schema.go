@@ -189,6 +189,8 @@ func WithNullable() ModelOpts {
 	}
 }
 
+// WithOptional sets the required field to false.
+
 // WithDescription sets the description field on the schema.
 func WithDescription(desc string) ModelOpts {
 	return func(s *openapi3.Schema) {
@@ -309,6 +311,9 @@ func (api *API) RegisterModel(model Model, opts ...ModelOpts) (name string, sche
 				}
 			}
 			schema.Properties[fieldName] = ref
+			if f.Type.Kind() != reflect.Pointer {
+				schema.Required = append(schema.Required, fieldName)
+			}
 		}
 	}
 
