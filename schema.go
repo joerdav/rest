@@ -254,7 +254,10 @@ func WithEnumConstants[T ~string | constraints.Integer]() ModelOpts {
 						}
 						for _, name := range v.Names {
 
-							c := p.TypesInfo.ObjectOf(name).(*types.Const)
+							c, ok := p.TypesInfo.ObjectOf(name).(*types.Const)
+							if !ok {
+								continue
+							}
 							if c.Type().String() == ty.PkgPath()+"."+ty.Name() {
 								str := c.Val().ExactString()
 								if c.Val().Kind() == constant.String {
