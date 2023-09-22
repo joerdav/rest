@@ -2,6 +2,10 @@ package rest
 
 import (
 	"fmt"
+	"go/ast"
+	"go/constant"
+	"go/token"
+	"go/types"
 	"reflect"
 	"sort"
 	"strings"
@@ -9,6 +13,7 @@ import (
 	"github.com/a-h/rest/getcomments/parser"
 	"github.com/getkin/kin-openapi/openapi3"
 	"golang.org/x/exp/constraints"
+	"golang.org/x/tools/go/packages"
 )
 
 func newSpec(name string) *openapi3.T {
@@ -210,6 +215,57 @@ func WithEnumValues[T ~string | constraints.Integer](values ...T) ModelOpts {
 		}
 		for _, v := range values {
 			s.Enum = append(s.Enum, v)
+		}
+	}
+}
+
+// WithEnumValues sets the property to be an enum value with the specific values.
+func WithEnumConstants[T ~string | constraints.Integer]() ModelOpts {
+	return func(s *openapi3.Schema) {
+		var t T
+		ty := reflect.TypeOf(t)
+		s.Type = openapi3.TypeString
+		if ty.Kind() != reflect.String {
+			s.Type = openapi3.TypeInteger
+		}
+		config := &packages.Config{
+			Mode: packages.NeedName |
+				packages.NeedFiles |
+				packages.NeedCompiledGoFiles |
+				packages.NeedTypes |
+				packages.NeedSyntax |
+				packages.NeedTypesInfo,
+		}
+		config.Fset = token.NewFileSet()
+		pkgs, err := packages.Load(config, ty.PkgPath())
+		if err != nil {
+			panic("could not load package " + ty.PkgPath())
+		}
+		for _, p := range pkgs {
+			for _, syn := range p.Syntax {
+				for _, d := range syn.Decls {
+					if _, ok := d.(*ast.GenDecl); !ok {
+						continue
+					}
+					for _, sp := range d.(*ast.GenDecl).Specs {
+						v, ok := sp.(*ast.ValueSpec)
+						if !ok {
+							continue
+						}
+						for _, name := range v.Names {
+
+							c := p.TypesInfo.ObjectOf(name).(*types.Const)
+							if strings.HasPrefix(c.Name(), ty.Name()) {
+								str := c.Val().ExactString()
+								if c.Val().Kind() == constant.String {
+									str = constant.StringVal(c.Val())
+								}
+								s.Enum = append(s.Enum, str)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }
